@@ -51,7 +51,7 @@ def endScore(board) -> (int, bool):
             if first is not MARK_NONE:
                 return (first, True)
 
-    if turns == 9:
+    if turns == cols * cols:
         return (MARK_NONE, True)
 
     return (MARK_NONE, False)
@@ -73,34 +73,68 @@ def nextState(state: State, move: Move) -> State:
 
 
 def heuristic(game, player):
-    # Only check lines that are winnable by either player
-    size = len(game)
+    board = game[0]
+    size = len(board)
     options = list()
+
     for indexes in winIndices(size):
-        line = [(game[r][c], (r, c)) for r, c in indexes]
+        line = [(board[r][c], (r, c)) for r, c in indexes]
+        # Only check lines that are winnable by either player
         if len(set(line[0])) < 3:
             options.append(line)
 
     # Create a set of possible places
-    # For each possible place check the following:
-    # --> Assign max value if it causes win & return
-    # --> Assign half max value if blocks immediate win
-    # --> Add score according to how much it strengthens all included lines
-    # --> --> (Cannot add more than 1/2 max, each line is 1/6 of max)
+    moves = set()
+    for line in options:
+        for position in line:
+            mark = position[0]
+            coords = position[1]
+            if mark is MARK_NONE:
+                moves.add((Move(coords[0], coords[1], player), 0))
+
+    moves = list(moves)
+    if len(moves) == 0:
+        # The game is unwinnable, play the first option
+        return getMoves(game)[0], 0
+
+    for index, move in enumerate(moves):
+        clone = nextState(game, move[0])
+        score = endScore(clone)
+        move = (move[0], score[0])
+
+        # --> If we can immediately end game, do so.
+        # --> The only other time this occurs is a tie
+        if score[1]:
+            return move[0], move[1]
+        # Assign a random score to the move
+        # TODO:Assign half max value if blocks immediate win
+        # TODO:Add score according to how much it strengthens all lines
+        # --->TODO:(Cannot add more than 1/2 max, each line is 1/6 of max)
+        if move[1] == 0:
+            move = (move[0], random.randint(-100, 100))
+
+        moves[index] = move
+
+    if player is MARK_X:
+        bestMove = max(moves, key=lambda x: x[1])
+    else:
+        bestMove = min(moves, key=lambda x: x[1])
+    return bestMove[0], bestMove[1]
 
 
 def minimax(game, depth, player):
-    if depth is 0:
-        return heuristic(game, player)
     end = endScore(game)
     if end[1]:
         return MARK_NONE, end[0]
+
+    if depth is 0:
+        return heuristic(game, player)
 
     if player is MARK_X:
         bestScore = -5000
         for move in getMoves(game):
             clone = nextState(game, Move(move[0], move[1], player))
-            _, value = minimax(clone, 1, player * -1)
+            _, value = minimax(clone, depth - 1, player * -1)
             # Break out early if we've found a best case
             if value == MARK_X:
                 bestMove = move
@@ -113,7 +147,7 @@ def minimax(game, depth, player):
         bestScore = 5000
         for move in getMoves(game):
             clone = nextState(game, Move(move[0], move[1], player))
-            _, value = minimax(clone, 1, player * -1)
+            _, value = minimax(clone, depth - 1, player * -1)
             # Break out early if we've found a best case
             if value == MARK_O:
                 bestMove = move
@@ -137,7 +171,7 @@ def playGame():
     game = initState(MAX_SIZE)
     player = MARK_X
     while True:
-        move, score = minimax(game, 1, player)
+        move, score = minimax(game, 3, player)
 
         player *= -1
         print(move)
